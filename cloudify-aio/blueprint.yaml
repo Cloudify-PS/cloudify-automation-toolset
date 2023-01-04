@@ -1,0 +1,357 @@
+tosca_definitions_version: cloudify_dsl_1_4
+
+description: |
+  This blueprint deploys a VM running Cloudify Manager on selected Cloud
+  Provider.
+
+imports:
+  - https://cloudify.co/spec/cloudify/6.4.1/types.yaml
+  - plugin:cloudify-fabric-plugin
+
+inputs:
+
+  provider_name:
+    type: string
+    display_label: Cloud Provider Name
+    description: | 
+      "Provider name chosen from: AWS, Azure, GCP."
+    default: aws
+    constraints:
+      - valid_values:
+        - azure
+        - aws
+        - gcp
+
+  cloudify_manager_version:
+    type: string
+    display_label: Cloudify Manager Version
+    description: Version of the Cloudify Manager to install.
+    default: '6.4.1'
+
+  resource_prefix:
+    type: string
+    display_label: Resources Prefix
+    description: Control parameters for names in resources.
+    default: 'dev'
+
+  cloudify_manager_admin_password:
+    type: string
+    display_label: Cloudify Manager Admin Password
+    description: >
+      Password for Admin user on the Cloudify Manager instance.
+    default: 'admin'
+
+  region_name:
+    type: string
+    display_label: Region name
+    description: Select region name
+    default: "AWS: us-west-2"
+    constraints:
+      - valid_values:
+        - "AWS: us-east-1"
+        - "AWS: us-east-2"
+        - "AWS: us-west-1"
+        - "AWS: us-west-2"
+        - "AWS: eu-central-1"
+        - "AWS: eu-west-1"
+        - "AWS: eu-west-2"
+        - "AWS: eu-south-1"
+        - "AWS: eu-west-3"
+        - "AWS: eu-north-1"
+        - "AWS: af-south-1"
+        - "AWS: ap-east-1"
+        - "AWS: ap-south-1"
+        - "AWS: ap-northeast-3"
+        - "AWS: ap-northeast-2"
+        - "AWS: ap-southeast-1"
+        - "AWS: ap-southeast-2"
+        - "AWS: ap-northeast-1"
+        - "AWS: ca-central-1"
+        - "AWS: cn-north-1"
+        - "AWS: cn-northwest-1"
+        - "AWS: me-south-1"
+        - "AWS: sa-east-1"
+        - "Azure: centralus"
+        - "Azure: eastus"
+        - "Azure: eastus2"
+        - "Azure: westus"
+        - "Azure: northcentralus"
+        - "Azure: southcentralus"
+        - "Azure: westcentralus"
+        - "Azure: westus2"
+        - "Azure: northeurope"
+        - "Azure: westeurope"
+        - "Azure: uksouth"
+        - "Azure: ukwest"
+        - "Azure: francecentral"
+        - "Azure: francesouth"
+        - "Azure: switzerlandnorth"
+        - "Azure: switzerlandwest"
+        - "Azure: germanynorth"
+        - "Azure: germanywestcentral"
+        - "Azure: norwaywest"
+        - "Azure: norwayeast"
+        - "Azure: canadacentral"
+        - "Azure: canadaeast"
+        - "Azure: brazilsouth"
+        - "Azure: southafricanorth"
+        - "Azure: southafricawest"
+        - "Azure: eastasia"
+        - "Azure: southeastasia"
+        - "Azure: japanwest"
+        - "Azure: japaneast"
+        - "Azure: southindia"
+        - "Azure: centralindia"
+        - "Azure: westindia"
+        - "Azure: koreacentral"
+        - "Azure: koreasouth"
+        - "Azure: uaecentral"
+        - "Azure: uaenorth"
+        - "Azure: australiaeast"
+        - "Azure: australiasoutheast"
+        - "Azure: australiacentral"
+        - "Azure: australiacentral2"
+        - "GCP: asia-south1"
+        - "GCP: asia-south2"
+        - "GCP: asia-east1"
+        - "GCP: asia-east2"
+        - "GCP: asia-northeast1"
+        - "GCP: asia-northeast2"
+        - "GCP: asia-northeast3"
+        - "GCP: asia-southeast1"
+        - "GCP: australia-southeast1"
+        - "GCP: australia-southeast2"
+        - "GCP: europe-central2"
+        - "GCP: europe-north2"
+        - "GCP: europe-southwest1"
+        - "GCP: europe-west1"
+        - "GCP: europe-west2"
+        - "GCP: europe-west3"
+        - "GCP: europe-west4"
+        - "GCP: europe-west6"
+        - "GCP: europe-west8"
+        - "GCP: europe-west9"
+        - "GCP: northamerica-northeast1"
+        - "GCP: northamerica-northeast2"
+        - "GCP: southamerica-east1"
+        - "GCP: us-central1"
+        - "GCP: us-east1"
+        - "GCP: us-east4"
+        - "GCP: us-west1"
+        - "GCP: us-west2"
+        - "GCP: us-west3"
+        - "GCP: us-west4"
+
+  network_cidr:
+    type: string
+    display_label: Network CIDR
+    description: CIDR of the new Network (VPC)
+    default: 10.10.0.0/16
+
+  subnet_cidr:
+    type: string
+    display_label: Subnet CIDR
+    description: CIDR of the new Subnet
+    default: 10.10.0.0/24
+
+  availability_zone:
+    type: string
+    display_label: Availability Zone
+    description: Select Availability Zone
+    default: "a"
+    constraints:
+      - valid_values:
+        - "a"
+        - "b"
+        - "c"
+        - "d"
+
+  instance_type:
+    type: string
+    display_label: VM size relevant to the Cloud Provider
+    default: "AWS: t2.medium (recommended)"
+    constraints:
+      - valid_values:
+        - "AWS: t2.micro"
+        - "AWS: t2.small"
+        - "AWS: t2.medium (recommended)"
+        - "AWS: t2.large"
+        - "AWS: t2.xlarge"
+        - "AWS: t2.2xlarge"
+        - "Azure: Standard_B1s"
+        - "Azure: Standard_B1ms"
+        - "Azure: Standard_B2s"
+        - "Azure: Standard_B2ms"
+        - "Azure: Standard_B4ms (recommended)"
+        - "Azure: Standard_B8ms"
+        - "Azure: Standard_B12ms"
+        - "Azure: Standard_B16ms"
+        - "Azure: Standard_B20ms"
+        - "GCP: n1-standard-1"
+        - "GCP: n1-standard-2"
+        - "GCP: n1-standard-4 (recommended)"
+        - "GCP: n1-standard-8"
+        - "GCP: n1-standard-16"
+        - "GCP: n1-standard-32"
+        - "GCP: n1-standard-64"
+        - "GCP: n1-standard-96"
+
+  agent_user:
+    type: string
+    display_label: Agent Username
+    description: >
+      The username of the agent running on the instance created from the image.
+    default: 'centos'
+
+  agent_key_name:
+    type: string
+    display_label: Secret name for Agent Private Key
+    default: agent_key
+
+  secrets_validation_archive:
+    type: string
+    display_label: URL for secrets vallidation zip archive
+    description: >
+      URL of infra zip file.
+    default: https://github.com/cloudify-community/cloudify-catalog/raw/6.4.0-build/tabs/other/secrets_validation/secrets_validation.zip
+    hidden: true
+
+  secrets_to_validate:
+    type: dict
+    display_label: Secrets to validate
+    description: | 
+      Provider secrets to check existence & values
+    default:
+      aws: [aws_access_key_id, aws_secret_access_key, license]
+      azure: [azure_client_id, azure_client_secret, azure_subscription_id, azure_tenant_id, license] 
+      gcp: [gcp_credentials, license]
+    hidden: true
+
+node_templates:
+  
+  virtual_machine:
+    type: cloudify.nodes.Component
+    properties:
+      resource_config:
+        blueprint:
+          external_resource: false
+          id:
+            concat:
+              - { get_input: resource_prefix }
+              - "-virtual-machine-"
+              - { get_input: provider_name }
+              - "-"
+              - { get_input: cloudify_manager_version }
+          blueprint_archive: "providers.zip"
+          main_file_name: { concat: [{ get_input: provider_name }, ".yaml"] }
+        deployment:
+          id:
+            concat:
+              - { get_input: resource_prefix }
+              - "-virtual-machine-"
+              - { get_input: provider_name }
+              - "-"
+              - { get_input: cloudify_manager_version }
+          auto_inc_suffix: false
+          inputs:
+            resource_prefix: { get_input: resource_prefix }
+            cloudify_manager_version: { get_input: cloudify_manager_version }
+            region_name: { string_split: [{ get_input: region_name }, ' ', 1] }
+            network_cidr: { get_input: network_cidr }
+            subnet_cidr: { get_input: subnet_cidr }
+            availability_zone: { get_input: availability_zone }
+            instance_type: { string_split: [{ get_input: instance_type }, ' ', 1] }
+            agent_user: { get_input: agent_user }
+            agent_key_name: { get_input: agent_key_name }
+    relationships:
+    - type: cloudify.relationships.depends_on
+      target: secrets_validation
+
+  cloudify_manager:
+    type: cloudify.nodes.Root
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        create:
+          implementation: fabric.fabric_plugin.tasks.run_script
+          inputs:
+            script_path: scripts/cloudify_manager_install.sh
+            fabric_env:
+              host_string:
+                get_capability:
+                  - { get_attribute: [virtual_machine, deployment, id] }
+                  - endpoint
+              user:
+                get_capability:
+                  - { get_attribute: [virtual_machine, deployment, id] }
+                  - user
+              key:
+                get_capability:
+                  - { get_attribute: [virtual_machine, deployment, id] }
+                  - key_content
+            process:
+              env:
+                VERSION: { get_input: cloudify_manager_version }
+                LICENSE: { concat: ['"', { get_secret: license }, '"'] }
+                PRIVATE_IP:
+                  get_capability:
+                    - { get_attribute: [virtual_machine, deployment, id] }
+                    - private_ip
+                PUBLIC_IP:
+                  get_capability:
+                    - { get_attribute: [virtual_machine, deployment, id] }
+                    - endpoint
+                ADMIN_PASSWORD: { get_input: cloudify_manager_admin_password }
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: virtual_machine
+
+  secrets_validation:
+    type: cloudify.nodes.Component
+    properties:
+      resource_config:
+        blueprint:
+          id:
+            concat:
+              - "secrets-validation-"
+              - { get_input: provider_name }
+          blueprint_archive: { get_input: secrets_validation_archive }
+          main_file_name: "blueprint.yaml"
+        deployment:
+          id:
+            concat:
+              - { get_input: resource_prefix }
+              - "-secrets-validation"
+          auto_inc_suffix: true
+          inputs: 
+            secrets: { get_input: [secrets_to_validate, { get_input: provider_name }] }
+            provider: { get_input: provider_name }
+
+labels:
+  csys-obj-type:
+    values:
+      - environment
+
+capabilities:
+
+  endpoint:
+    description: The external endpoint of the VM.
+    value:
+      concat:
+        - "http://"
+        - { get_attribute: [virtual_machine, capabilities, endpoint] }
+
+  user:
+    description: User ID.
+    value: { get_attribute: [virtual_machine, capabilities, user] }
+
+  key_content:
+    description: Private agent key.
+    value: { get_attribute: [virtual_machine, capabilities, key_content] }
+
+  vpc_id:
+    description: VPC resource ID.
+    value: { get_attribute: [virtual_machine, capabilities, vpc_id] }
+
+  vm_id: 
+    description: VM resource ID.
+    value: { get_attribute: [virtual_machine, capabilities, vm_id] }

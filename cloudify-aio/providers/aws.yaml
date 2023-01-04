@@ -1,0 +1,419 @@
+tosca_definitions_version: cloudify_dsl_1_4
+
+description: >
+  Creates necessary network resources and an EC2 instance with public IP
+  on AWS.
+
+imports:
+  - https://cloudify.co/spec/cloudify/6.4.1/types.yaml
+  - plugin:cloudify-aws-plugin
+  - plugin:cloudify-fabric-plugin
+  - plugin:cloudify-utilities-plugin?version= >=1.22.1
+
+inputs:
+
+  resource_prefix:
+    type: string
+    description: Control parameters for names in resources.
+    default: 'dev'
+
+  cloudify_manager_version:
+    type: string
+    display_label: Cloudify Manager Version
+    description: Version of the Cloudify Manager to install.
+    default: '6.4.1'
+
+  region_name:
+    type: string
+    display_label: AWS Region
+    description: Select AWS region
+    default: us-east-1
+    constraints:
+      - valid_values:
+        - us-east-1
+        - us-east-2
+        - us-west-1
+        - us-west-2
+        - eu-central-1
+        - eu-west-1
+        - eu-west-2
+        - eu-south-1
+        - eu-west-3
+        - eu-north-1
+        - af-south-1
+        - ap-east-1
+        - ap-south-1
+        - ap-northeast-3
+        - ap-northeast-2
+        - ap-southeast-1
+        - ap-southeast-2
+        - ap-northeast-1
+        - ca-central-1
+        - cn-north-1
+        - cn-northwest-1
+        - me-south-1
+        - sa-east-1
+
+  network_cidr:
+    type: string
+    display_label: VPC CIDR
+    description: CIDR of the new VPC
+    default: 10.10.0.0/16
+
+  subnet_cidr:
+    type: string
+    display_label: Subnet CIDR
+    description: CIDR of the new Subnet
+    default: 10.10.0.0/24
+
+  availability_zone:
+    type: string
+    display_label: Availability Zone
+    description: Select Availability Zone in VPC
+    default: "a"
+    constraints:
+      - valid_values:
+        - "a"
+        - "b"
+        - "c"
+
+  instance_type:
+    type: string
+    display_label: VM size
+    default: t2.medium
+    constraints:
+      - valid_values:
+        - t2.micro
+        - t2.small
+        - t2.medium
+        - t2.large
+        - t2.xlarge
+        - t2.2xlarge
+
+  agent_user:
+    type: string
+    display_label: The user name of the VM
+    description: >
+      The username of the agent running on the instance created from
+      the image.
+    default: centos
+
+  agent_key_name:
+    type: string
+    display_label: Agent Key Name
+    default: agent_key
+
+dsl_definitions:
+
+  client_config: &client_config
+    aws_access_key_id: { get_secret: aws_access_key_id }
+    aws_secret_access_key: { get_secret: aws_secret_access_key }
+    region_name: { get_input: region_name }
+
+node_templates:
+
+  vm:
+    type: cloudify.nodes.aws.ec2.Instances
+    properties:
+      client_config: *client_config
+      agent_config:
+        install_method: none
+        user: { get_input: agent_user }
+        key: { get_attribute: [agent_key, private_key_export] }
+      cloudify_tagging: false
+      resource_config:
+        ImageId: { get_attribute: [ ami, aws_resource_id ] }
+        InstanceType: { get_input: instance_type }
+        kwargs:
+          UserData: { get_attribute: [ cloud_init, cloud_config ] }
+          BlockDeviceMappings:
+            - DeviceName: '/dev/sda1'
+              Ebs:
+                VolumeSize: 30
+          TagSpecifications:
+            - ResourceType: instance
+              Tags:
+                - Key: Name
+                  Value:
+                    concat:
+                      - { get_input: resource_prefix }
+                      - '-cloudify-aio-'
+                      - { get_input: cloudify_manager_version }
+                - Key: deployment_id
+                  Value: { get_sys: [deployment, id] }
+                - Key: tenant
+                  Value: { get_sys: [tenant, name] }
+      use_public_ip: true
+    relationships:
+      - type: cloudify.relationships.depends_on
+        target: ami
+      - type: cloudify.relationships.depends_on
+        target: nic
+      - type: cloudify.relationships.depends_on
+        target: ip
+      - type: cloudify.relationships.depends_on
+        target: cloud_init
+
+  cloud_init:
+    type: cloudify.nodes.CloudInit.CloudConfig
+    properties:
+      resource_config:
+        users:
+          - name: { get_input: agent_user }
+            shell: /bin/bash
+            sudo: ['ALL=(ALL) NOPASSWD:ALL']
+            ssh-authorized-keys:
+              - { get_attribute: [agent_key, public_key_export] }
+    relationships:
+      - type: cloudify.relationships.depends_on
+        target: agent_key
+
+  agent_key:
+    type: cloudify.keys.nodes.RSAKey
+    properties:
+      resource_config:
+        key_name: { get_input: agent_key_name }
+        openssh_format: true
+      use_secret_store: true
+      use_secrets_if_exist: true
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        create:
+          implementation: keys.cloudify_ssh_key.operations.create
+          inputs:
+            store_private_key_material: true
+
+  ami:
+    type: cloudify.nodes.aws.ec2.Image
+    properties:
+      resource_config:
+        kwargs:
+          Filters:
+          - Name: name
+            Values:
+            - 'CentOS7-cloudify-examples-image'
+          - Name: owner-id
+            Values:
+            - '263721492972'
+      client_config: *client_config
+
+  ip:
+    type: cloudify.nodes.aws.ec2.ElasticIP
+    properties:
+      client_config: *client_config
+    relationships:
+      - type: cloudify.relationships.depends_on
+        target: nic
+
+  nic:
+    type: cloudify.nodes.aws.ec2.Interface
+    properties:
+      client_config: *client_config
+      resource_config:
+        kwargs:
+          Description: Created by Cloudify.
+          SubnetId: { get_attribute: [ subnet, aws_resource_id ] }
+          Groups:
+          - { get_attribute: [ security_group, aws_resource_id ] }
+    relationships:
+      - type: cloudify.relationships.depends_on
+        target: security_group
+      - type: cloudify.relationships.depends_on
+        target: subnet
+
+  security_group_rules:
+    type: cloudify.nodes.aws.ec2.SecurityGroupRuleIngress
+    properties:
+      client_config: *client_config
+      resource_config:
+        IpPermissions:
+          - IpProtocol: icmp
+            FromPort: -1
+            ToPort: -1
+            IpRanges:
+              - CidrIp: 0.0.0.0/0
+          - IpProtocol: tcp
+            FromPort: 22
+            ToPort: 22
+            IpRanges:
+              - CidrIp: 0.0.0.0/0
+          - IpProtocol: tcp
+            FromPort: 80
+            ToPort: 80
+            IpRanges:
+              - CidrIp: 0.0.0.0/0
+          - IpProtocol: tcp
+            FromPort: 443
+            ToPort: 443
+            IpRanges:
+              - CidrIp: 0.0.0.0/0
+          - IpProtocol: tcp
+            FromPort: 5671
+            ToPort: 5671
+            IpRanges:
+              - CidrIp: 0.0.0.0/0
+          - IpProtocol: tcp
+            FromPort: 8000
+            ToPort: 8000
+            IpRanges:
+              - CidrIp: 0.0.0.0/0
+          - IpProtocol: tcp
+            FromPort: 8009
+            ToPort: 8009
+            IpRanges:
+              - CidrIp: 0.0.0.0/0
+          - IpProtocol: tcp
+            FromPort: 53333
+            ToPort: 53333
+            IpRanges:
+              - CidrIp: 0.0.0.0/0
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: security_group
+
+  security_group:
+    type: cloudify.nodes.aws.ec2.SecurityGroup
+    properties:
+      client_config: *client_config
+      resource_config:
+        GroupName:
+          concat:
+            - { get_input: resource_prefix }
+            - '-cloudify_aio_'
+            - { get_input: cloudify_manager_version }
+            - '_sg'
+        Description: Created by Cloudify.
+        VpcId: { get_attribute: [ vpc, aws_resource_id ] }
+    relationships:
+      - type: cloudify.relationships.depends_on
+        target: vpc
+
+  route_public_subnet_internet_gateway:
+    type: cloudify.nodes.aws.ec2.Route
+    properties:
+      resource_config:
+        kwargs:
+          DestinationCidrBlock: '0.0.0.0/0'
+      client_config: *client_config
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: routetable
+      - type: cloudify.relationships.connected_to
+        target: internet_gateway
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        stop: {}
+
+  routetable:
+    type: cloudify.nodes.aws.ec2.RouteTable
+    properties:
+      client_config: *client_config
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: vpc
+      - type: cloudify.relationships.connected_to
+        target: subnet
+
+  subnet:
+    type: cloudify.nodes.aws.ec2.Subnet
+    properties:
+      client_config: *client_config
+      cloudify_tagging: false
+      resource_config:
+        CidrBlock: { get_input: subnet_cidr }
+        AvailabilityZone:
+          concat:
+            - { get_input: region_name }
+            - { get_input: availability_zone }
+        kwargs:
+          TagSpecifications:
+            - ResourceType: subnet
+              Tags:
+                - Key: Name
+                  Value:
+                    concat:
+                      - { get_input: resource_prefix }
+                      - '-cloudify-aio-'
+                      - { get_input: cloudify_manager_version }
+                      - '-subnet'
+    relationships:
+      - type: cloudify.relationships.depends_on
+        target: vpc
+
+  internet_gateway:
+    type: cloudify.nodes.aws.ec2.InternetGateway
+    properties:
+      client_config: *client_config
+    relationships:
+      - type: cloudify.relationships.connected_to
+        target: vpc
+
+  vpc:
+    type: cloudify.nodes.aws.ec2.Vpc
+    properties:
+      client_config: *client_config
+      cloudify_tagging: false
+      resource_config:
+        CidrBlock: { get_input: network_cidr }
+        kwargs:
+          TagSpecifications:
+            - ResourceType: vpc
+              Tags:
+                - Key: Name
+                  Value:
+                    concat:
+                      - { get_input: resource_prefix }
+                      - '-cloudify-aio-'
+                      - { get_input: cloudify_manager_version }
+                      - '-vpc'
+
+groups:
+
+  scalable_compute:
+    members:
+      - vm
+      - nic
+      - ip
+
+policies:
+
+  scalable_compute_policy:
+    type: cloudify.policies.scaling
+    properties:
+      default_instances: 1
+    targets: [scalable_compute]
+
+capabilities:
+
+  endpoint:
+    description: The external endpoint of the VM.
+    value: { get_attribute: [ip, aws_resource_id] }
+
+  private_ip:
+    description: The private IP of the VM.
+    value: { get_attribute: [vm, private_ip_address] }
+
+  user:
+    description: User ID.
+    value: { get_input: agent_user }
+
+  key_content:
+    description: Private agent key.
+    value: { get_attribute: [agent_key, private_key_export] }
+
+  security_group_id: 
+    description: Security group resource ID.
+    value: { get_attribute: [security_group, aws_resource_id] }
+
+  vpc_id:
+    description: VPC resource ID.
+    value: { get_attribute: [vpc, aws_resource_id] }
+
+  vm_id: 
+    description: VM resource ID.
+    value: { get_attribute: [vm, aws_resource_id] }
+  
+  rg_id: 
+    description: >
+      Mock resource group id - to be compatible with Azure VM template.
+    value: 'mocked_resource_group_id'
