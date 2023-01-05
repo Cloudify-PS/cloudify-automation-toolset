@@ -4,10 +4,10 @@
 The blueprint provisions a Virtual Machine on the desired Cloud environment.  
 Supported cloud providers are: AWS, Azure, and GCP.  
 
-## Requirements
+### Requirements
 In order to run the blueprint successfully you need to provide secrets with credentials and install plugins relevant for the cloud provider.  
 
-## Secrets
+### Secrets
 Before deploying the blueprint on any Cloud Provider, create a license secret:
 
 | Name                  | Description                             |
@@ -37,7 +37,7 @@ For GCP:
 | gcp_credentials       | GCP credentials json file content |
 
 
-## Plugins
+### Plugins
 
 Blueprints use the following [plugins](https://cloudify.co/plugins/):
 - [Cloudify Fabric Plugin](https://github.com/cloudify-cosmo/cloudify-fabric-plugin)
@@ -46,7 +46,7 @@ Blueprints use the following [plugins](https://cloudify.co/plugins/):
 - [Cloudify Azure Plugin](https://github.com/cloudify-cosmo/cloudify-azure-plugin) (for Azure deployment)
 - [Cloudify GCP Plugin](https://github.com/cloudify-cosmo/cloudify-gcp-plugin) (for GCP deployment)
 
-## Inputs
+### Inputs
 
 | Display Label                           | Name                            | Type   | Description                                               | Default      |
 | --------------------------------------- | ------------------------------- | ------ | --------------------------------------------------------- | ------------ |
@@ -65,7 +65,7 @@ Blueprints use the following [plugins](https://cloudify.co/plugins/):
 | URL for secrets vallidation zip archive | secrets_validation_archive      | string | URL for secrets vallidation zip archive                   | N/A          |
 | Secrets to validate                     | secrets_to_validate             | dict   | Provider secrets to check existence & values              | N/A          |
 
-## Capabilities
+### Capabilities
 
 | Name              | Description                         |
 | ----------------- | ----------------------------------- |
@@ -75,7 +75,7 @@ Blueprints use the following [plugins](https://cloudify.co/plugins/):
 | vpc_id            | VPC resource ID.                    |
 | vm_id             | VM resource ID.                     |
 
-## Estimated Install & Uninstall times
+### Estimated Install & Uninstall times
 
 The times may be longer for the first deployment as the relevant plugin installs.  
 
